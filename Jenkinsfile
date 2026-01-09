@@ -1,7 +1,7 @@
 pipeline {
     agent{
         docker {
-            image 'php:8.4-cli'
+            image 'php:8.4-fpm-alpine3.22'
             args '-u root'
         }
     }
@@ -15,7 +15,7 @@ pipeline {
         stage("Install composer and dependencies") {
             steps {
                 sh 'curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer'
-                sh 'apt update && apt install -y php8.4-gd'
+                sh 'docker-php-ext-install -j$(nproc) mbstring zip exif pcntl gd'
             }
         }
         stage("Copy .env") {
