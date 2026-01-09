@@ -1,7 +1,7 @@
 pipeline {
     agent{
         docker {
-            image 'composer:latest'
+            image 'php:8.4-cli'
             args '-u root'
         }
     }
@@ -12,12 +12,17 @@ pipeline {
     }
 
     stages {
+        stage("Install composer") {
+            steps {
+                sh 'curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer'
+            }
+        }
         stage("Copy .env") {
             steps {
                 sh 'php -r "file_exists(\'.env\') || copy(\'.env.example\', \'.env\');"'
             }
         }
-        stage("Installation dependencies") {
+        stage("Install dependencies") {
             steps {
                 sh "composer update"
                 sh "composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist"
