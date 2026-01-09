@@ -15,7 +15,7 @@ pipeline {
         stage("Install composer and dependencies") {
             steps {
                 sh 'curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer'
-                sh 'apt install -y php-gd'
+                sh 'apt update && apt install -y php8.4-gd'
             }
         }
         stage("Copy .env") {
