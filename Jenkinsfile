@@ -12,9 +12,10 @@ pipeline {
     }
 
     stages {
-        stage("Install composer") {
+        stage("Install composer and dependencies") {
             steps {
                 sh 'curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer'
+                sh 'apt install -y php-gd'
             }
         }
         stage("Copy .env") {
