@@ -50,8 +50,8 @@ class FileController extends Controller
 
     public function download(DownloadRequest $request) 
     {
+        Gate::authorize('access-admin');
         try {
-            Gate::authorize('access-admin');
             $path = $request->validated('path');
             $pathRelative = pathinfo($path, PATHINFO_DIRNAME). "/";
     
