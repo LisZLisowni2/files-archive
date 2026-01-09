@@ -15,16 +15,21 @@ pipeline {
         stage("Install composer and dependencies") {
             steps {
                 sh 'curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer'
-                sh 'apk add --no-cache \
+                sh '''apk add --no-cache \
                     libpng-dev \
+                    libjpeg-turbo-dev \
+                    freetype-dev \
                     libzip-dev \
                     zip \
                     unzip \
                     oniguruma-dev \
                     nodejs \
                     npm \
-                    curl'
-                sh 'docker-php-ext-install -j$(nproc) mbstring zip exif pcntl gd'
+                    curl
+                    
+                    docker-php-ext-configure gd --with-freetype --with-jpeg
+                    docker-php-ext-install -j$(nproc) gd mbstring zip exif pcntl
+                '''
             }
         }
         stage("Copy .env") {
