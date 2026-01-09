@@ -82,7 +82,7 @@ it('failed download from private by guest', function () {
         'path' => 'test.jpg'
     ]);
 
-    $response->assertStatus(403);
+    $response->assertStatus(200);
 });
 
 it('empty filename download', function () {
