@@ -48,9 +48,7 @@ it('download from private', function () {
 });
 
 it('failed download from private by user', function () {
-    Storage::fake('local');
-
-    Storage::put('test.jpg', UploadedFile::fake()->image('test.jpg'));
+    Storage::fake('local')->put('test.jpg', UploadedFile::fake()->image('test.jpg'));
 
     $user = User::factory()->create();
 
@@ -74,11 +72,10 @@ it('failed download from public by guest', function () {
 });
 
 it('failed download from private by guest', function () {
-    Storage::fake('local');
-
+    Storage::fake('local')->put('test.jpg', UploadedFile::fake()->image('test.jpg'));
+    
     $user = User::factory()->create();
 
-    Storage::put('test.jpg', UploadedFile::fake()->image('test.jpg'));
 
     $response = $this->actingAs($user)
         ->postJson('/dashboard/download/private', [
