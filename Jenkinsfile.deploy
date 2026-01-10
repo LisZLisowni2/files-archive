@@ -30,20 +30,28 @@ pipeline {
 
         stage('Deploy via SSH Tunnel') {
             steps {
-                sh 'ssh -i ${SSH_KEY} -L 6443:192.168.122.13:6443 -f -N -o StrictHostKeyChecking=no rafal@100.111.6.53'
-
+                sh 'ssh -vvv -i ${SSH_KEY} -L 6443:192.168.122.13:6443 -f -N -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -M -S /tmp/k8s-tunnel rafal@100.111.6.53'
+                sh 'sleep 5'
+                
                 script {
                     try {
                         echo "Tunnel open. Testing connection to Localhost:6443..."
                         
-                        sh "kubectl --kubeconfig=${KUBECONFIG_FILE} --server=https://localhost:6443 --insecure-skip-tls-verify cluster-info"
+                        sh '''
+                            if ! command -v kubectl &> /dev/null; then
+                                curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                                chmod +x ./kubectl
+                            fi
+                        '''
+                        
+                        sh './kubectl --kubeconfig=${KUBECONFIG_FILE} --server=https://localhost:6443 --insecure-skip-tls-verify cluster-info'
                         
                         echo "Deploying..."
-                        sh "kubectl --kubeconfig=${KUBECONFIG_FILE} --server=https://localhost:6443 --insecure-skip-tls-verify apply -f deployment.yaml"
+                        sh './kubectl --kubeconfig=${KUBECONFIG_FILE} --server=https://localhost:6443 --insecure-skip-tls-verify apply -f deployment.yaml'
                         
                     } finally {
                         echo "Closing SSH Tunnel..."
-                        sh "pkill -f 'ssh -i .* -L 6443:ADDRESS_C:6443'"
+                        sh "ssh -S /tmp/k8s-tunnel -O exit rafal@100.111.6.53 || true"
                     }
                 }
             }
