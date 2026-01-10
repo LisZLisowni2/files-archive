@@ -94,5 +94,5 @@ it('empty filename download', function () {
 
     $response = $this->actingAs($user)->postJson('/dashboard/download/public');
 
-    $response->assertStatus(200);
+    $response->assertStatus(422);
 });
