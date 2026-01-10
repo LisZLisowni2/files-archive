@@ -11,15 +11,19 @@ pipeline {
 
     stages {
         stage('Build Docker Image') {
-            sh "docker build -t ${APP_IMAGE_NAME}:${APP_IMAGE_TAG} ."
-            sh "docker tag ${APP_IMAGE}:${APP_IMAGE_TAG} ${APP_IMAGE}:latest"
+            steps {
+                sh "docker build -t ${APP_IMAGE_NAME}:${APP_IMAGE_TAG} ."
+                sh "docker tag ${APP_IMAGE}:${APP_IMAGE_TAG} ${APP_IMAGE}:latest"
+            }
         }
 
         stage('Push Docker Images') {
-            script {
-                docker.withRegistry('https://index.docker.io/v1/', DOCKER_CREDS) {
-                    sh "docker push ${APP_IMAGE_NAME}:${APP_IMAGE_TAG}"
-                    sh "docker push ${APP_IMAGE_NAME}:latest"
+            steps {
+                script {
+                    docker.withRegistry('https://index.docker.io/v1/', DOCKER_CREDS) {
+                        sh "docker push ${APP_IMAGE_NAME}:${APP_IMAGE_TAG}"
+                        sh "docker push ${APP_IMAGE_NAME}:latest"
+                    }
                 }
             }
         }
