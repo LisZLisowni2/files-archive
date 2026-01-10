@@ -23,6 +23,7 @@ WORKDIR /var/www/html
 
 # Install system dependencies & PHP extensions
 RUN apk add --no-cache \
+    libpq-dev \
     libpng-dev \
     libzip-dev \
     zip \
