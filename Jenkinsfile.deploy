@@ -4,7 +4,7 @@ pipeline {
     environment {
         APP_IMAGE_NAME = "liszlisowni/laravel-app"
         APP_IMAGE_TAG = "${env.BUILD_ID}"
-        DOCKER_CREDS = credentials('docker-push-token')
+        DOCKER_CREDS = 'docker-push-token'
         KUBECONFIG_FILE = credentials("k8s-config-file")
         SSH_KEY = credentials("ssh-k8s-token")
     }
