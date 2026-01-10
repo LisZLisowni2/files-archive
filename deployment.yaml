@@ -73,7 +73,7 @@ metadata:
   namespace: production
 data:
   DB_CONNECTION: pgsql
-  DB_HOST: db
+  DB_HOST: db-svc
   DB_PORT: "5432"
   DB_DATABASE: laravel
   DB_USERNAME: laravel
@@ -87,9 +87,8 @@ metadata:
   namespace: production
 type: Opaque
 data:
-  APP_KEY: "YmFzZTY0OnZtY2twMGZCbHVyVGY2anBVSnBrbk5zVUV2VnRuMTNsdmFYNVJyZ1lKRzA9Cg=="
-  DB_PASSWORD: "bGFyYXZlbAo="
-  DB_ROOT_PASSWORD: "bGFyYXZlbAo="
+  APP_KEY: "YmFzZTY0Oi80andOWlluWUxSMjVDb29LejN4bTdNYXFkcWwzbDFhR2dRamd2ZnVBek09"
+  DB_PASSWORD: "bGFyYXZlbA=="
 
 ---
 
@@ -131,21 +130,66 @@ spec:
           emptyDir: {}
       initContainers:
       - name: code-provider
-        image: liszlisowni/laravel-app:v1
+        image: liszlisowni/laravel-app:latest
+        env:
+          - name: APP_KEY
+            valueFrom:
+              secretKeyRef:
+                name: laravel-secret
+                key: APP_KEY
+          - name: DB_CONNECTION
+            valueFrom:
+              configMapKeyRef:
+                name: laravel-config
+                key: DB_CONNECTION
+          - name: DB_HOST
+            valueFrom:
+              configMapKeyRef:
+                name: laravel-config
+                key: DB_HOST
+          - name: DB_PORT
+            valueFrom:
+              configMapKeyRef:
+                name: laravel-config
+                key: DB_PORT
+          - name: DB_DATABASE
+            valueFrom:
+              configMapKeyRef:
+                name: laravel-config
+                key: DB_DATABASE
+          - name: DB_USERNAME
+            valueFrom:
+              configMapKeyRef:
+                name: laravel-config
+                key: DB_USERNAME
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: laravel-secret
+                key: DB_PASSWORD
         command: 
           - "sh"
           - "-c"
           - | 
             cp -rp /var/www/html/. /shared/
 
-            echo "Waiting for mysql-svc..."
+            cd /shared
+
+            echo "Waiting for db-svc..."
             until nc -z -v -w30 db-svc 5432; do
               echo "Postgres is unavailable - sleeping"
               sleep 2
             done
             echo "Postgres is up - running migrations"
             php artisan migrate --force
+            mkdir -p storage/app/public
+            mkdir -p storage/app/private
             php artisan storage:link
+        volumeMounts:
+          - mountPath: /shared
+            name: app-data
+          - mountPath: /shared/storage/app/
+            name: laravel-storage
 
       containers:
       - name: nginx
@@ -167,6 +211,12 @@ spec:
             subPath: default.conf
       - name: laravel-app
         image: liszlisowni/laravel-app:latest
+        command:
+          - sh
+          - -c
+          - |
+            php artisan storage:link
+            php-fpm
         resources:
           requests:
             memory: "128Mi"
@@ -263,11 +313,6 @@ spec:
             configMapKeyRef:
               name: laravel-config
               key: DB_DATABASE
-        - name: POSTGRES_PASSWORD_ROOT
-          valueFrom:
-            secretKeyRef:
-              name: laravel-secret
-              key: DB_ROOT_PASSWORD
         volumeMounts:
         - name: db-data
           mountPath: /var/lib/postgresql
@@ -338,6 +383,7 @@ spec:
   - protocol: TCP
     port: 80
     targetPort: 80
+    nodePort: 30080
 
 ---
 
