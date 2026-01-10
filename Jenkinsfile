@@ -1,7 +1,7 @@
 pipeline {
     agent{
         docker {
-            image 'php:8.4-fpm-alpine3.22'
+            image 'liszlisowni/laravel-runner:v1'
             args '-u root'
         }
     }
@@ -12,24 +12,9 @@ pipeline {
     }
 
     stages {
-        stage("Install composer and dependencies") {
+        stage("Notify Github") {
             steps {
-                sh 'curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer'
-                sh '''apk add --no-cache \
-                    libpng-dev \
-                    libjpeg-turbo-dev \
-                    freetype-dev \
-                    libzip-dev \
-                    zip \
-                    unzip \
-                    oniguruma-dev \
-                    nodejs \
-                    npm \
-                    curl
-                    
-                    docker-php-ext-configure gd --with-freetype --with-jpeg
-                    docker-php-ext-install -j$(nproc) gd mbstring zip exif pcntl
-                '''
+                githubNotify status: 'PENDING', description: 'Testing...'
             }
         }
         stage("Copy .env") {
