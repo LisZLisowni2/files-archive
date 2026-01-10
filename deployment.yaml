@@ -1,0 +1,238 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: laravel-storage-pv
+  namespace: production
+spec:
+  capacity:
+    storage: 10Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  nfs:
+    path: /srv/nfs/k8s-data
+    server: 10.0.0.100
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: laravel-storage-pvc
+  namespace: production
+spec:
+  resources:
+    requests:
+      storage: 10Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: laravel-config
+  namespace: production
+data:
+  DB_CONNECTION: psql
+  DB_HOST: db
+  DB_PORT: "5432"
+  DB_DATABASE: laravel
+  DB_USERNAME: laravel
+
+---
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: laravel-secret
+  namespace: production
+type: Opaque
+data:
+  APP_KEY: "YmFzZTY0OnZtY2twMGZCbHVyVGY2anBVSnBrbk5zVUV2VnRuMTNsdmFYNVJyZ1lKRzA9Cg=="
+  DB_PASSWORD: "laravel"
+  DB_ROOT_PASSWORD: "laravel"
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: laravel-app
+  namespace: production
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: laravel-app
+  template:
+    metadata:
+      labels:
+        app: laravel-app
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - laravel-app
+                topologyKey: name
+      volumes:
+        - name: laravel-storage
+          persistentVolumeClaim:
+            claimName: laravel-storage-pvc
+      containers:
+      - name: laravel-app
+        image: liszlisowni/laravel-app:latest
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "256m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        volumeMounts:
+          - mountPath: /var/www/html/storage/app/
+            name: laravel-storage
+        env:
+          - name: APP_KEY
+            valueFrom:
+              secretKeyRef:
+                name: laravel-secret
+                key: APP_KEY
+          - name: DB_CONNECTION
+            valueFrom:
+              configMapKeyRef:
+                name: laravel-config
+                key: DB_CONNECTION
+          - name: DB_HOST
+            valueFrom:
+              configMapKeyRef:
+                name: laravel-config
+                key: DB_HOST
+          - name: DB_PORT
+            valueFrom:
+              configMapKeyRef:
+                name: laravel-config
+                key: DB_PORT
+          - name: DB_DATABASE
+            valueFrom:
+              configMapKeyRef:
+                name: laravel-config
+                key: DB_DATABASE
+          - name: DB_USERNAME
+            valueFrom:
+              configMapKeyRef:
+                name: laravel-config
+                key: DB_USERNAME
+        ports:
+        - containerPort: 80
+
+---
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db
+  namespace: production
+spec:
+  selector:
+    matchLabels:
+      app: db
+  serviceName: db-svc
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: myapp
+    spec:
+      containers:
+      - name: myapp
+        image: postgres:18
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "500m"
+          limits:
+            memory: "512Mi"
+            cpu: "1000m"
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: db-data
+          mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+  - metadata:
+      name: db-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 10Gi
+
+---
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: laravel-hpa
+  namespace: production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: laravel-app
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 50
+  
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0 
+      policies:
+        - periodSeconds: 15
+          type: Percent
+          value: 100
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - periodSeconds: 60
+          type: Percent
+          value: 50 
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: laravel-svc
+  namespace: production
+spec:
+  sessionAffinity: ClientIP
+  type: LoadBalancer
+  selector:
+    app: laravel-app
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
