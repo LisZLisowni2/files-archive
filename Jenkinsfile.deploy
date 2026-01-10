@@ -30,7 +30,7 @@ pipeline {
 
         stage('Deploy via SSH Tunnel') {
             steps {
-                sh 'ssh -i ${SSH_KEY} -L 6443:192.168.122.13:6443 -f -N -o StrictHostKeyChecking=no user@100.111.6.53'
+                sh 'ssh -i ${SSH_KEY} -L 6443:192.168.122.13:6443 -f -N -o StrictHostKeyChecking=no rafal@100.111.6.53'
 
                 script {
                     try {
