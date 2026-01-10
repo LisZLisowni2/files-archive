@@ -10,6 +10,7 @@ spec:
   accessModes:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-client
   nfs:
     path: /srv/nfs/k8s-data
     server: 10.0.0.100
@@ -26,8 +27,42 @@ spec:
     requests:
       storage: 10Gi
   volumeMode: Filesystem
+  storageClassName: nfs-client
   accessModes:
     - ReadWriteMany
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: production
+data:
+  default.conf: |
+    server {
+        listen 80;
+        index index.php index.html;
+        root /var/www/html/public; # Laravel's public folder
+
+        location / {
+            try_files $uri $uri/ /index.php?$query_string;
+        }
+
+        location ~ \.php$ {
+            # '127.0.0.1' works because they share the same Pod network
+            fastcgi_pass 127.0.0.1:9000; 
+            fastcgi_index index.php;
+            include fastcgi_params;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            fastcgi_param PATH_INFO $fastcgi_path_info;
+        }
+
+        location ~ /\.ht {
+            deny all;
+        }
+    }
+
 
 ---
 
@@ -37,7 +72,7 @@ metadata:
   name: laravel-config
   namespace: production
 data:
-  DB_CONNECTION: psql
+  DB_CONNECTION: pgsql
   DB_HOST: db
   DB_PORT: "5432"
   DB_DATABASE: laravel
@@ -89,7 +124,47 @@ spec:
         - name: laravel-storage
           persistentVolumeClaim:
             claimName: laravel-storage-pvc
+        - name: config-volume
+          configMap:
+            name: nginx-config
+        - name: app-data
+          emptyDir: {}
+      initContainers:
+      - name: code-provider
+        image: liszlisowni/laravel-app:v1
+        command: 
+          - "sh"
+          - "-c"
+          - | 
+            cp -rp /var/www/html/. /shared/
+
+            echo "Waiting for mysql-svc..."
+            until nc -z -v -w30 db-svc 5432; do
+              echo "Postgres is unavailable - sleeping"
+              sleep 2
+            done
+            echo "Postgres is up - running migrations"
+            php artisan migrate --force
+            php artisan storage:link
+
       containers:
+      - name: nginx
+        image: nginx:latest
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "256m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        ports:
+        - containerPort: 80
+        volumeMounts:
+          - mountPath: /var/www/html
+            name: app-data
+          - mountPath: /etc/nginx/conf.d/default.conf
+            name: config-volume
+            subPath: default.conf
       - name: laravel-app
         image: liszlisowni/laravel-app:latest
         resources:
@@ -133,8 +208,14 @@ spec:
               configMapKeyRef:
                 name: laravel-config
                 key: DB_USERNAME
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: laravel-secret
+                key: DB_PASSWORD
+
         ports:
-        - containerPort: 80
+        - containerPort: 9000
 
 ---
 
@@ -166,9 +247,30 @@ spec:
             cpu: "1000m"
         ports:
         - containerPort: 5432
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: laravel-secret
+              key: DB_PASSWORD
+        - name: POSTGRES_USER
+          valueFrom:
+            configMapKeyRef:
+              name: laravel-config
+              key: DB_USERNAME
+        - name: POSTGRES_DB
+          valueFrom:
+            configMapKeyRef:
+              name: laravel-config
+              key: DB_DATABASE
+        - name: POSTGRES_PASSWORD_ROOT
+          valueFrom:
+            secretKeyRef:
+              name: laravel-secret
+              key: DB_ROOT_PASSWORD
         volumeMounts:
         - name: db-data
-          mountPath: /var/lib/postgresql/data
+          mountPath: /var/lib/postgresql
   volumeClaimTemplates:
   - metadata:
       name: db-data
@@ -236,3 +338,18 @@ spec:
   - protocol: TCP
     port: 80
     targetPort: 80
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-svc
+  namespace: production
+spec:
+  selector:
+    app: db
+  ports:
+  - protocol: TCP
+    port: 5432
+    targetPort: 5432
