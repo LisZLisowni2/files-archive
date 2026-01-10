@@ -14,7 +14,7 @@ pipeline {
     stages {
         stage("Notify Github") {
             steps {
-                setGitHubPullRequestStatus(status: 'PENDING', message: 'Testing...')
+                setGitHubPullRequestStatus(state: 'PENDING', message: 'Running tests...')
             }
         }
         stage("Copy .env") {
@@ -58,10 +58,10 @@ pipeline {
 
     post {
         success {
-            setGitHubPullRequestStatus(status: 'SUCCESS', message: 'Tests Passed!')
+            setGitHubPullRequestStatus(state: 'SUCCESS', message: 'Tests Passed!')
         }
         failure {
-            setGitHubPullRequestStatus(status: 'FAILURE', message: 'Tests Failed.')
+            setGitHubPullRequestStatus(state: 'FAILURE', message: 'Tests Failed.')
         }
     }
 }
