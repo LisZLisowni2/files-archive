@@ -1,67 +1,60 @@
 pipeline {
-    agent{
-        docker {
-            image 'liszlisowni/laravel-runner:v1'
-            args '-u root'
-        }
-    }
+    agent any
 
     environment {
-        DB_CONNECTION="sqlite"
-        DB_DATABASE="database/database.sqlite"
+        APP_IMAGE_NAME = "liszlisowni/laravel-app"
+        APP_IMAGE_TAG = "${env.BUILD_ID}"
+        DOCKER_CREDS = 'docker-push-token'
+        KUBECONFIG_FILE = credentials("k8s-config-file")
+        SSH_KEY = credentials("ssh-k8s-token")
     }
 
     stages {
-        stage("Notify Github") {
+        stage('Build Docker Image') {
             steps {
-                setGitHubPullRequestStatus(state: 'PENDING', message: 'Running tests...')
+                sh "docker build -t ${APP_IMAGE_NAME}:${APP_IMAGE_TAG} ."
+                sh "docker tag ${APP_IMAGE_NAME}:${APP_IMAGE_TAG} ${APP_IMAGE_NAME}:latest"
             }
         }
-        stage("Copy .env") {
-            steps {
-                sh 'php -r "file_exists(\'.env\') || copy(\'.env.example\', \'.env\');"'
-            }
-        }
-        stage("Install dependencies") {
-            steps {
-                sh "composer update"
-                sh "composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist"
-            }
-        }
-        stage("Generate key") {
-            steps {
-                sh "php artisan key:generate"
-            }
-        }
-        stage("Directory Permissions") {
-            steps {
-                sh "chmod -R 777 storage bootstrap/cache"
-            }
-        }
-        stage("Create Database") {
-            steps {
-                sh "mkdir -p database"
-                sh "php artisan migrate --force"
-            }
-        }
-        stage("Link public storage") {
-            steps {
-                sh "php artisan storage:link"
-            }
-        }
-        stage("Run tests") {
-            steps {
-                sh "php artisan test"
-            }
-        }
-    }
 
-    post {
-        success {
-            setGitHubPullRequestStatus(state: 'SUCCESS', message: 'Tests Passed!')
+        stage('Push Docker Images') {
+            steps {
+                script {
+                    docker.withRegistry('https://index.docker.io/v1/', DOCKER_CREDS) {
+                        sh "docker push ${APP_IMAGE_NAME}:${APP_IMAGE_TAG}"
+                        sh "docker push ${APP_IMAGE_NAME}:latest"
+                    }
+                }
+            }
         }
-        failure {
-            setGitHubPullRequestStatus(state: 'FAILURE', message: 'Tests Failed.')
+
+        stage('Deploy via SSH Tunnel') {
+            steps {
+                sh 'ssh -i ${SSH_KEY} -L 6443:192.168.122.13:6443 -f -N -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes -M -S /tmp/k8s-tunnel rafal@100.111.6.53'
+                sh 'sleep 5'
+                
+                script {
+                    try {
+                        echo "Tunnel open. Testing connection to Localhost:6443..."
+                        
+                        sh '''
+                            if ! command -v kubectl &> /dev/null; then
+                                curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                                chmod +x ./kubectl
+                            fi
+                        '''
+                        
+                        sh './kubectl --kubeconfig=${KUBECONFIG_FILE} --server=https://localhost:6443 --insecure-skip-tls-verify cluster-info'
+                        
+                        echo "Deploying..."
+                        sh './kubectl --kubeconfig=${KUBECONFIG_FILE} --server=https://localhost:6443 --insecure-skip-tls-verify apply -f deployment.yaml'
+                        
+                    } finally {
+                        echo "Closing SSH Tunnel..."
+                        sh "ssh -S /tmp/k8s-tunnel -O exit rafal@100.111.6.53 || true"
+                    }
+                }
+            }
         }
     }
 }
