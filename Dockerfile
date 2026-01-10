@@ -13,6 +13,8 @@ COPY . .
 
 RUN composer dump-autoload --optimize --no-dev
 
+RUN php artisan storage:link
+
 # Stage 2: Production image
 FROM php:8.4-fpm-alpine3.22 AS runner
 
