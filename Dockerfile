@@ -32,7 +32,7 @@ RUN apk add --no-cache \
     npm \
     curl
 
-RUN docker-php-ext-install pdo_mysql mbstring zip exif pcntl gd
+RUN docker-php-ext-install pdo_pgsql pdo_mysql mbstring zip exif pcntl gd
 
 # Copy application code from build stage
 COPY --from=build /app /var/www/html
