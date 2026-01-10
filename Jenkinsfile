@@ -14,7 +14,7 @@ pipeline {
     stages {
         stage("Notify Github") {
             steps {
-                githubNotify status: 'PENDING', description: 'Testing...'
+                setGitHubPullRequestStatus(status: 'PENDING', message: 'Testing...')
             }
         }
         stage("Copy .env") {
@@ -58,10 +58,10 @@ pipeline {
 
     post {
         success {
-            githubNotify context: 'Jenkins/Laravel-Tests', status: 'SUCCESS', description: 'Tests passed'
+            setGitHubPullRequestStatus(status: 'SUCCESS', message: 'Tests Passed!')
         }
         failure {
-            githubNotify context: 'Jenkins/Laravel-Tests', status: 'FAILURE', description: 'Tests failed'
+            setGitHubPullRequestStatus(status: 'FAILURE', message: 'Tests Failed.')
         }
     }
 }
