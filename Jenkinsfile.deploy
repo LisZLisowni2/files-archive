@@ -1,0 +1,29 @@
+pipeline {
+    agent any
+
+    environment {
+        KUBECONFIG_FILE = credentials("k8s-config-file")
+        SSH_KEY = credentials("ssh-k8s-token")
+    }
+
+    stages {
+        stage('Deploy via SSH Tunnel') {
+            steps {
+                sh "ssh -i ${SSH_KEY} -L 6443:192.168.122.13:6443 -f -N -o StrictHostKeyChecking=no user@100.111.6.53"
+
+                try {
+                    echo "Tunnel open. Testing connection to Localhost:6443..."
+                    
+                    sh "kubectl --kubeconfig=${KUBECONFIG_FILE} --server=https://localhost:6443 --insecure-skip-tls-verify cluster-info"
+                    
+                    echo "Deploying..."
+                    sh "kubectl --kubeconfig=${KUBECONFIG_FILE} --server=https://localhost:6443 --insecure-skip-tls-verify apply -f deployment.yaml"
+                    
+                } finally {
+                    echo "Closing SSH Tunnel..."
+                    sh "pkill -f 'ssh -i .* -L 6443:ADDRESS_C:6443'"
+                }
+            }
+        }
+    }
+}
